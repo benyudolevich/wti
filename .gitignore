@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Regeneratable model fit cache (large binary, no interpretive value on its
+# own -- see model_cache.py; deterministically rebuilt from Misc.xlsx)
+cache/*.pkl
+
+# Claude Code tool-internal state, not project content
+.claude/
+
+# Compiled report output (source is main.tex; compile locally or on Overleaf)
+report/*.pdf
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
