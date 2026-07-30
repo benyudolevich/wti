@@ -299,13 +299,139 @@ once news breaks cannot forecast that news in advance. The model detects
 shift, which describes most geopolitical/supply episodes including 2026),
 not single-day surprise shocks.
 
-\paragraph{Status: validated, ready for the next stage.} Given this
-result, the 2-state TVTP model is considered validated as a regime
-simulator. Remaining open items (Part V) are to (a) revisit whether 3/4
-states can be made to converge with the improved optimizer settings, since
-more granularity could sharpen the calm/elevated/crisis distinction, and
-(b) define and backtest the actual entry/exit trading rule on top of this
-now-validated forecast.
+\paragraph{Status (superseded below): validated, ready for the next stage.}
+Given this result, the 2-state TVTP model was initially considered
+validated as a regime simulator. A closer re-examination (next
+subsections), prompted by scrutinizing the out-of-sample claim rather than
+taking the aggregate table at face value, found the picture to be
+considerably more modest. Remaining open items (Part V) are to (a) revisit
+whether 3/4 states can be made to converge with the improved optimizer
+settings, since more granularity could sharpen the calm/elevated/crisis
+distinction, and (b) define and backtest the actual entry/exit trading rule
+on top of this forecast.
+
+\subsection{GPR\_OIL as an alternative TVTP driver}
+A newer, oil-specific geopolitical risk index (\textbf{GPR\_OIL}, from
+Iacoviello \& Tong 2026, constructed via LLM classification of news text
+rather than GRI's keyword-count methodology) became available and was
+substituted for GRI as the TVTP transition driver, with everything else
+unchanged. The same 25-raw-episode validation methodology was rerun.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Horizon $h$ (trading days) & GRI OOS mean & GPR\_OIL OOS mean & Calm baseline \\
+\midrule
+3  & 0.964 & 0.974 & 0.032 \\
+5  & 0.886 & 0.905 & 0.044 \\
+10 & 0.901 & 0.937 & 0.073 \\
+15 & 0.867 & 0.899 & 0.099 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+GPR\_OIL performs marginally better than GRI at every horizon on this
+aggregate metric. It is now the default driver. However, see below: this
+aggregate table is precisely the number that turned out to be misleading
+about genuine predictive power.
+
+\subsection{Re-examining the out-of-sample validation}
+Two problems with the validation methodology itself were found on closer
+inspection, both of which inflate the apparent out-of-sample performance
+above:
+
+\paragraph{(a) Episode-counting artifact.} The episode identifier
+(consecutive OVX$>$60 days, new episode any time OVX dips below 60) chops
+a single sustained event into several rows whenever OVX briefly dips below
+60 on the way down. Directly inspecting the raw OVX path confirmed this:
+the 2026-02-27 to 2026-06-11 event is one continuous elevated-vol episode
+(peak 120.91, multi-month decay) that the original methodology counted as
+\emph{four separate episodes} purely because of brief dips under the
+threshold during the decay. After merging runs separated by less than 10
+trading days into a single episode, the 25 raw episodes collapse to
+\textbf{14 genuinely distinct events}, of which only \textbf{3} (not 6, as
+originally reported) are truly out-of-sample: 2025-06-17, 2026-02-27, and
+2026-07-13.
+
+\paragraph{(b) GPR\_OIL data staleness.} The GPR\_OIL source file lags
+roughly one month behind the rest of the dataset (data through 2026-06-30
+vs.\ the trading data through the present). Every date after 2026-06-30 is
+carrying forward that same frozen reading via the as-of join. Any forecast
+computed for the most recent $\sim$month is therefore not reacting to
+anything current --- it is reading a static, month-old number.
+
+\subsection{Genuine out-of-sample scoreboard: episode-by-episode}
+Rather than trust the aggregate lift number, each of the three genuinely
+distinct out-of-sample episodes was inspected individually, using a
+zoomed-in visualization: OVX plotted against the model's
+$\text{crisis\_prob\_fwd15}$ forecast, with the background colored by
+forecast bucket (green 0--25\%, yellow 25--50\%, orange 50--75\%, purple
+75--100\%), switching to \textbf{red} whenever OVX has actually crossed the
+high-vol threshold (i.e.\ the point at which the forecast is no longer the
+relevant signal --- the outcome it was forecasting has already arrived).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../charts/11_price_with_prob_crossings.png}
+  \caption{CL1 price, 2007--present, with a star marker at every date
+  $\text{crisis\_prob\_fwd10}$ (GPR\_OIL-driven) first crossed above 50\%.}
+\end{figure}
+
+\textbf{Episode 1: 2026-02-27 (peak OVX 120.91) --- a genuine, clean win.}
+The forecast walked in order from green through yellow and orange to
+\textbf{purple by \textasciitilde 2026-01-20}, while OVX was still only
+43--50 -- a real 5--6 week lead before OVX actually crossed 60 on
+2026-02-27, and well ahead of OVX's own visible climb.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../charts/17_oos_2026_02.png}
+  \caption{2026-02-27 episode: clean, ordered walk-up through forecast
+  buckets weeks ahead of the actual OVX threshold crossing.}
+\end{figure}
+
+\textbf{Episode 2: 2025-06-17 (peak OVX 71.56) --- fails as a
+discriminator.} The background sits at purple (75--100\%) for essentially
+the entire two-month window shown, regardless of whether OVX is calm
+(mid-30s) or spiking (71.56). The forecast provided no information about
+\emph{when}, within a chronically ``very high'' stretch, the actual spike
+would occur.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../charts/16_oos_2025_06.png}
+  \caption{2025-06-17 episode: forecast pinned at very-high for the entire
+  window, providing no discrimination between calm and spiking OVX.}
+\end{figure}
+
+\textbf{Episode 3: 2026-07-13 (peak OVX 68.97) --- not a fair test.}
+Entirely inside the GPR\_OIL staleness window (b) above: the forecast line
+is essentially flat for the whole period, since the input feeding it is a
+frozen, month-old reading rather than live information.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{../charts/18_oos_2026_07.png}
+  \caption{2026-07-13 episode: forecast is flat throughout because
+  GPR\_OIL itself is stale over this window -- not a meaningful test either
+  way.}
+\end{figure}
+
+\paragraph{Revised status.} Of the three genuinely distinct, genuinely
+testable out-of-sample episodes: \textbf{one clear win, one clear failure,
+one untestable.} That is not enough evidence, on its own, to claim a
+validated forward-looking edge -- the aggregate ``87--96\% OOS lift''
+table earlier in this section overstates confidence by (i) counting the
+same sustained event multiple times and (ii) not accounting for the driver
+going stale in the most recent window. The single genuine win
+(2026-02-27) is real and substantial -- weeks of lead time on the largest
+vol event in the sample -- but the 2025-06-17 case demonstrates the same
+model can also sit pinned at a maximal reading for months with zero
+discriminating power. \textbf{Practical implication:} the model's forecast
+is more useful as a binary ``has something started brewing'' flag than as
+a precisely-timed entry signal, and it is prone to long stretches of
+false-positive-shaped (though not technically wrong) readings during
+chronically tense periods.
 
 % =====================================================================
 \section{Part III: Strategy / Risk Management (calendar-spread leg)}
@@ -509,6 +635,18 @@ version.}
   probability at 3--15 day horizons vs.\ a 3--10\% calm baseline; genuine
   surprise shocks (2011 debt downgrade, 2021 Omicron) are, expectedly, not
   anticipated.
+  \item \textbf{[Done]} Reran the same validation with GPR\_OIL (an
+  oil-specific, LLM-derived geopolitical risk index) substituted for GRI as
+  the TVTP driver -- marginally better at every horizon, now the default.
+  \item \textbf{[Done, revises the above]} Re-examined the out-of-sample
+  claim episode-by-episode rather than trusting the aggregate table: found
+  an episode-counting artifact (one sustained event counted up to 4 times)
+  and a GPR\_OIL staleness issue (source data $\sim$1 month lagged). Of the
+  3 genuinely distinct, genuinely testable OOS episodes: 1 clean win
+  (2026-02-27, 5--6 weeks' real lead time), 1 clear failure (2025-06-17,
+  forecast pinned at very-high for 2 months regardless of actual OVX
+  level), 1 untestable (2026-07-13, stale input). Not enough evidence yet
+  to call this a validated edge.
   \item \textbf{[Done, revised 2026-07-16]} Define and backtest the
   entry/exit rule for the volatility-timing strategy. First version
   (forecast-based exit) exited well after the peak, giving back entire

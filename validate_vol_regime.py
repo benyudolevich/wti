@@ -13,6 +13,7 @@ did the h-day-ahead FORECAST (crisis_prob_fwd{h}), computed h days BEFORE
 onset, actually show? That is the forecast a trader would have had in hand
 at the time -- not the same-day classification.
 """
+import sys
 import numpy as np
 import pandas as pd
 import warnings
@@ -22,9 +23,12 @@ from load_data import load_daily_dataset
 from vol_regime import attach_vol_regime, FORECAST_HORIZONS
 import config
 
+DRIVER_COL = sys.argv[1] if len(sys.argv) > 1 else "log_gri"
+
 df = load_daily_dataset()
 df["log_ovx"] = np.log(df["ovx"])
-df, train_result, crisis_regime = attach_vol_regime(df)
+print(f"=== TVTP driver: {DRIVER_COL} ===")
+df, train_result, crisis_regime = attach_vol_regime(df, driver_col=DRIVER_COL)
 df = df.reset_index(drop=True)
 
 high = df["ovx"] > 60

@@ -164,6 +164,148 @@ def plot_joint_regime_states(df, state_desc, start="2024-09-01", path=OUT_DIR / 
     return path
 
 
+def plot_joint_regime_states_on_price(df, state_desc, start="2024-09-01", path=OUT_DIR / "09_vol_joint_states_price.png"):
+    """Same learned states/colors as chart 08, but shown against the actual
+    oil price (CL1) instead of OVX -- to see how the vol-regime states
+    (fit purely on OVX level+momentum, no price information at all) line up
+    with what the underlying price was actually doing."""
+    plot_df = df.loc[df["date"] >= start].reset_index(drop=True)
+
+    ordered_states = state_desc.sort_values("ovx_level")["state"].tolist()
+    cmap = plt.cm.RdYlBu_r
+    colors = {f"state_{s}": cmap(i / (len(ordered_states) - 1)) for i, s in enumerate(ordered_states)}
+
+    fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(plot_df["date"], plot_df["cl1"], linewidth=1.4, color="black", zorder=3, label="CL1 (WTI front-month)")
+
+    for i in range(len(plot_df) - 1):
+        state = plot_df.at[i, "joint_state"]
+        ax.axvspan(plot_df.at[i, "date"], plot_df.at[i + 1, "date"],
+                   color=colors.get(state, "white"), alpha=0.5, linewidth=0)
+
+    handles = [plt.Rectangle((0, 0), 1, 1, color=colors[f"state_{s}"], alpha=0.5) for s in ordered_states]
+    labels = [f"state {s} (OVX~{state_desc.loc[state_desc['state']==s,'ovx_level'].values[0]:.0f}, "
+              f"mom={state_desc.loc[state_desc['state']==s,'momentum_5d_log_chg'].values[0]:+.3f})"
+              for s in ordered_states]
+    ax.legend(handles + [ax.get_lines()[0]], labels + ["CL1"], loc="upper left", fontsize=8, ncol=2)
+
+    ax.set_title("WTI front-month price (CL1) with the same learned joint vol-regime states as Chart 8")
+    ax.set_ylabel("CL1, $/bbl")
+    locator = mdates.AutoDateLocator()
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
+def plot_price_with_probability_crossings(
+    df, prob_col="crisis_prob_fwd10", threshold=0.50,
+    path=OUT_DIR / "11_price_with_prob_crossings.png",
+):
+    """CL1 price over time with a star marker at each date the given
+    forward-looking crisis-probability forecast first crosses above
+    `threshold` (rising-edge only -- an episode sitting above threshold for
+    weeks gets one star at onset, not one per day)."""
+    plot_df = df.dropna(subset=[prob_col, "cl1"]).reset_index(drop=True)
+
+    above = plot_df[prob_col] > threshold
+    crossings = above & ~above.shift(1, fill_value=False)
+    cross_df = plot_df.loc[crossings]
+
+    fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(plot_df["date"], plot_df["cl1"], linewidth=1.0, color="#4C72B0", zorder=2, label="CL1 (WTI front-month)")
+    ax.scatter(cross_df["date"], cross_df["cl1"], marker="*", s=220, color="#B8860B",
+               edgecolor="black", linewidth=0.6, zorder=5,
+               label=f"{prob_col} first crosses above {threshold:.0%}")
+    ax.axvline(config.TRAIN_END, color="gray", linestyle=":", linewidth=1.2, label="Train/test split")
+
+    ax.set_title(f"CL1 price with star markers where {prob_col} first crossed above {threshold:.0%}")
+    ax.set_ylabel("CL1, $/bbl")
+    ax.set_xlabel("Date")
+    locator = mdates.AutoDateLocator()
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    ax.legend(loc="upper left")
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path, cross_df[["date", "cl1", prob_col]]
+
+
+PROB_BUCKET_COLORS = [
+    (0.00, 0.25, "#2ECC71", "0-25% (calm)"),
+    (0.25, 0.50, "#F4D03F", "25-50% (watch)"),
+    (0.50, 0.75, "#E67E22", "50-75% (elevated)"),
+    (0.75, 1.01, "#A569BD", "75-100% (very high)"),
+]
+ALREADY_IN_COLOR = "#E74C3C"
+ALREADY_IN_LABEL = "Already in high-vol regime (OVX > threshold -- forecast no longer actionable)"
+
+
+def _bucket_color(prob, already_in):
+    if already_in:
+        return ALREADY_IN_COLOR
+    for lo, hi, color, _ in PROB_BUCKET_COLORS:
+        if lo <= prob < hi:
+            return color
+    return "white"
+
+
+def plot_regime_transition_zoom(
+    df, start, end, prob_col="crisis_prob_fwd15", ovx_threshold=60,
+    path=OUT_DIR / "15_regime_transition_zoom.png",
+):
+    """Zoomed-in view of one episode: background colored by the model's
+    forward-looking probability bucket (green->yellow->orange->purple as
+    crisis_prob_fwdN rises), switching to red once OVX has actually crossed
+    into the high-vol regime -- at that point the forecast is no longer the
+    relevant signal, we're already living the outcome it was forecasting."""
+    plot_df = df.loc[(df["date"] >= start) & (df["date"] <= end)].reset_index(drop=True)
+    already_in = (plot_df["ovx"] > ovx_threshold).to_numpy()
+    probs = plot_df[prob_col].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(15, 7))
+
+    for i in range(len(plot_df) - 1):
+        color = _bucket_color(probs[i], already_in[i])
+        ax.axvspan(plot_df.at[i, "date"], plot_df.at[i + 1, "date"], color=color, alpha=0.35, linewidth=0)
+
+    ax.plot(plot_df["date"], plot_df["ovx"], linewidth=1.8, color="black", zorder=3, label="OVX")
+    ax.axhline(ovx_threshold, color="black", linestyle=":", linewidth=1, alpha=0.6,
+               label=f"OVX={ovx_threshold} (already-in-regime threshold)")
+    ax.set_ylabel("OVX")
+
+    ax2 = ax.twinx()
+    ax2.plot(plot_df["date"], plot_df[prob_col], linewidth=1.4, color="#1A5276",
+             linestyle="--", alpha=0.85, label=f"{prob_col} (right axis)")
+    ax2.set_ylabel(f"{prob_col}")
+    ax2.set_ylim(-0.02, 1.02)
+
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c, alpha=0.35) for _, _, c, _ in PROB_BUCKET_COLORS]
+    labels = [lbl for _, _, _, lbl in PROB_BUCKET_COLORS]
+    handles.append(plt.Rectangle((0, 0), 1, 1, color=ALREADY_IN_COLOR, alpha=0.35))
+    labels.append(ALREADY_IN_LABEL)
+    line1, = ax.plot([], [], color="black", linewidth=1.8)
+    line2, = ax2.plot([], [], color="#1A5276", linestyle="--", linewidth=1.4)
+    ax.legend(handles + [line1, line2], labels + ["OVX (left axis)", f"{prob_col} (right axis)"],
+              loc="upper left", fontsize=8, ncol=1)
+
+    ax.set_title(f"Regime-transition forecast zoom: {prob_col}, {plot_df['date'].min():%Y-%m-%d} to {plot_df['date'].max():%Y-%m-%d}")
+    ax.set_xlabel("Date")
+    locator = mdates.AutoDateLocator()
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    ax.grid(True, alpha=0.25)
+    plt.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
 def generate_all(df, trades):
     return [
         plot_ovx_full_history_with_trades(df, trades),
@@ -182,8 +324,13 @@ if __name__ == "__main__":
 
     df = load_daily_dataset()
     df["log_ovx"] = np.log(df["ovx"])
-    df, train_result, crisis_regime = attach_vol_regime(df)
+    df, train_result, crisis_regime = attach_vol_regime(df, driver_col="log_gpr_oil")
     df, trades = run_vol_backtest(df)
 
     for p in generate_all(df, trades):
         print(f"Saved {p}")
+
+    chart_path, crossings = plot_price_with_probability_crossings(df, prob_col="crisis_prob_fwd10")
+    print(f"Saved {chart_path}")
+    print(f"\n{len(crossings)} rising-edge crossings above 50% (crisis_prob_fwd10, GPR_OIL-driven):")
+    print(crossings.to_string(index=False))

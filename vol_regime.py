@@ -33,25 +33,25 @@ import model_cache
 FORECAST_HORIZONS = (3, 5, 10, 15)
 
 
-def _build_exog_tvtp(df, gri_center, gri_scale):
+def _build_exog_tvtp(df, driver_col, driver_center, driver_scale):
     return np.column_stack([
         np.ones(len(df)),
-        (df["log_gri"].to_numpy() - gri_center) / gri_scale,
+        (df[driver_col].to_numpy() - driver_center) / driver_scale,
     ])
 
 
-def fit_vol_regime_model(df):
-    train = df.loc[df["date"] <= config.TRAIN_END, ["log_ovx", "log_gri"]].dropna()
-    gri_center = train["log_gri"].mean()
-    gri_scale = train["log_gri"].std()
+def fit_vol_regime_model(df, driver_col="log_gri"):
+    train = df.loc[df["date"] <= config.TRAIN_END, ["log_ovx", driver_col]].dropna()
+    driver_center = train[driver_col].mean()
+    driver_scale = train[driver_col].std()
 
     fp = model_cache.fingerprint(
-        config.TRAIN_END, config.VOL_REGIME_K_STATES,
-        model_cache.hash_series(train["log_ovx"]), model_cache.hash_series(train["log_gri"]),
+        config.TRAIN_END, config.VOL_REGIME_K_STATES, driver_col,
+        model_cache.hash_series(train["log_ovx"]), model_cache.hash_series(train[driver_col]),
     )
 
     def _fit():
-        exog_tvtp_train = _build_exog_tvtp(train, gri_center, gri_scale)
+        exog_tvtp_train = _build_exog_tvtp(train, driver_col, driver_center, driver_scale)
         train_model = MarkovRegression(
             train["log_ovx"].to_numpy(),
             k_regimes=config.VOL_REGIME_K_STATES,
@@ -73,16 +73,16 @@ def fit_vol_regime_model(df):
         return train_model, train_result, crisis_regime, regime_means
 
     train_model, train_result, crisis_regime, regime_means = model_cache.load_or_fit(
-        "vol_regime_tvtp", fp, _fit
+        f"vol_regime_tvtp_{driver_col}", fp, _fit
     )
 
-    return train_model, train_result, crisis_regime, regime_means, gri_center, gri_scale
+    return train_model, train_result, crisis_regime, regime_means, driver_center, driver_scale
 
 
-def compute_filtered_and_forecasts(df, train_result, crisis_regime, gri_center, gri_scale):
-    valid = df[["log_ovx", "log_gri"]].notna().all(axis=1)
+def compute_filtered_and_forecasts(df, train_result, crisis_regime, driver_col, driver_center, driver_scale):
+    valid = df[["log_ovx", driver_col]].notna().all(axis=1)
     valid_df = df.loc[valid]
-    exog_tvtp_full = _build_exog_tvtp(valid_df, gri_center, gri_scale)
+    exog_tvtp_full = _build_exog_tvtp(valid_df, driver_col, driver_center, driver_scale)
 
     full_model = MarkovRegression(
         valid_df["log_ovx"].to_numpy(),
@@ -114,15 +114,17 @@ def compute_filtered_and_forecasts(df, train_result, crisis_regime, gri_center, 
     return result
 
 
-def attach_vol_regime(df):
+def attach_vol_regime(df, driver_col="log_gri"):
     df = df.copy()
-    train_model, train_result, crisis_regime, regime_means, gri_center, gri_scale = fit_vol_regime_model(df)
+    train_model, train_result, crisis_regime, regime_means, driver_center, driver_scale = fit_vol_regime_model(
+        df, driver_col
+    )
 
     ordered = sorted(np.exp(regime_means))
     print(f"Vol-regime means (OVX), low to high: {[f'{m:.1f}' for m in ordered]}")
     print(f"Converged: {train_result.mle_retvals.get('converged', 'n/a')}, log-likelihood: {train_result.llf:.2f}")
 
-    forecasts = compute_filtered_and_forecasts(df, train_result, crisis_regime, gri_center, gri_scale)
+    forecasts = compute_filtered_and_forecasts(df, train_result, crisis_regime, driver_col, driver_center, driver_scale)
     df = pd.concat([df, forecasts], axis=1)
 
     return df, train_result, crisis_regime

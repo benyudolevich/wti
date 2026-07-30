@@ -24,7 +24,24 @@ from patsy import dmatrix
 
 import config
 
-FORMULA = f"cr(utilization, df={config.UTILIZATION_SPLINE_DF}) + cr(log_gri, df={config.GRI_SPLINE_DF})"
+# constraints="center" re-parameterizes each spline basis to be orthogonal
+# to the constant. Without it, patsy's automatic Intercept plus two cr()
+# terms (each of which already spans a constant direction on its own) made
+# the design matrix exactly rank-deficient (rank 7 of 9 columns, condition
+# number ~1.1e16) -- discovered while building vol_fair_value.py, where the
+# same pattern with only one spline term caused OLS coefficients to blow up
+# to ~1e11 (a near-singular matrix being inverted rather than correctly
+# recognized as singular). Here the un-centered version happened to still
+# produce finite, reasonable-looking coefficients (apparently on the right
+# side of numpy.linalg.pinv's truncation threshold), but the underlying
+# rank-deficiency was the same latent bug -- coefficients not uniquely
+# identified, and fragile to any change in matrix conditioning (new data,
+# different LAPACK/platform). Centering removes the redundancy outright:
+# rank 9 of 9, condition number ~33.
+FORMULA = (
+    f"cr(utilization, df={config.UTILIZATION_SPLINE_DF}, constraints='center') "
+    f"+ cr(log_gri, df={config.GRI_SPLINE_DF}, constraints='center')"
+)
 REQUIRED_COLUMNS = ["utilization", "log_gri", "spread"]
 
 
