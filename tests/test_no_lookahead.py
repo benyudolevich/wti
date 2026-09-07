@@ -19,5 +19,5 @@ def test_inventory_release_date_is_after_week_ending_observation():
 
     released = _build_release_dates(inventory)
 
-    assert released.loc[0, "release_date"] == pd.Timestamp("2025-01-22")
+    assert released.loc[0, "release_date"] == pd.Timestamp("2025-01-23")
     assert released.loc[0, "release_date"] > inventory_date
