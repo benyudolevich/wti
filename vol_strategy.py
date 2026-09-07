@@ -209,7 +209,7 @@ if __name__ == "__main__":
 
     df = load_daily_dataset()
     df["log_ovx"] = np.log(df["ovx"])
-    df, train_result, crisis_regime = attach_vol_regime(df)
+    df, train_result, crisis_regime = attach_vol_regime(df, driver_col=config.VOL_REGIME_DRIVER)
     df, trades = run_vol_backtest(df)
 
     print()

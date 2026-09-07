@@ -41,6 +41,15 @@ methodology evolves; sections marked \emph{provisional} reflect
 work-in-progress that has not yet been fully validated.
 \end{abstract}
 
+\paragraph{Implementation note.}
+The reproducible volatility-regime path is
+\texttt{run\_vol\_backtest.py}, which uses the oil-specific
+\texttt{GPR\_OIL} driver by default through
+\texttt{config.VOL\_REGIME\_DRIVER}. The earlier GRI-only regime classifier
+remains part of the calendar-spread research path and can still be selected
+for comparison.
+
+
 \tableofcontents
 
 % =====================================================================

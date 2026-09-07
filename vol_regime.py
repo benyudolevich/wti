@@ -4,8 +4,8 @@ Forward-looking volatility regime model.
 Unlike regime.py (which classifies the CURRENT state from GRI alone with a
 fixed transition matrix), this fits a Markov-switching model on log(OVX) --
 the actual volatility series we care about -- where the TRANSITION
-PROBABILITIES themselves are a function of GRI (time-varying transition
-probabilities, TVTP). That means when GRI rises, the model's own estimated
+PROBABILITIES themselves are a function of the configured geopolitical-risk driver
+(time-varying transition probabilities, TVTP). That means when the driver rises, the model's own estimated
 probability of transitioning into the high-vol state rises too, *before*
 OVX has necessarily moved -- which is what lets this produce a genuine
 h-day-ahead forecast rather than just a same-day classification.
@@ -16,9 +16,9 @@ window only, then frozen and applied via the causal Hamilton filter (not
 the Kim smoother) across the full sample.
 
 Forecasting mechanism: given the filtered state distribution at time t and
-the transition matrix implied by GRI_t (frozen-covariate assumption -- we
-don't know future GRI, so we project forward assuming today's GRI level
-persists), the h-day-ahead state distribution is TM^h @ state_t (Chapman-
+the transition matrix implied by today's driver level (frozen-covariate
+assumption -- we do not know the future driver, so we project forward
+assuming today's level persists), the h-day-ahead state distribution is TM^h @ state_t (Chapman-
 Kolmogorov). This is what "5 days before a regime shift" cashes out to
 mechanically.
 """
@@ -40,7 +40,8 @@ def _build_exog_tvtp(df, driver_col, driver_center, driver_scale):
     ])
 
 
-def fit_vol_regime_model(df, driver_col="log_gri"):
+def fit_vol_regime_model(df, driver_col=None):
+    driver_col = driver_col or config.VOL_REGIME_DRIVER
     train = df.loc[df["date"] <= config.TRAIN_END, ["log_ovx", driver_col]].dropna()
     driver_center = train[driver_col].mean()
     driver_scale = train[driver_col].std()
@@ -93,7 +94,7 @@ def compute_filtered_and_forecasts(df, train_result, crisis_regime, driver_col, 
     filtered = full_model.filter(train_result.params)
     state_probs = filtered.filtered_marginal_probabilities  # (nobs, k_regimes)
 
-    # Transition matrix implied at each date by that date's GRI level.
+    # Transition matrix implied at each date by that date's driver level.
     transition_matrices = full_model.regime_transition_matrix(train_result.params, exog_tvtp=exog_tvtp_full)
     # shape (k_regimes, k_regimes, nobs); columns sum to 1 (Hamilton convention:
     # tm[:, :, t] @ state_vector_{t-1} = state_vector_t)
@@ -114,7 +115,8 @@ def compute_filtered_and_forecasts(df, train_result, crisis_regime, driver_col, 
     return result
 
 
-def attach_vol_regime(df, driver_col="log_gri"):
+def attach_vol_regime(df, driver_col=None):
+    driver_col = driver_col or config.VOL_REGIME_DRIVER
     df = df.copy()
     train_model, train_result, crisis_regime, regime_means, driver_center, driver_scale = fit_vol_regime_model(
         df, driver_col
