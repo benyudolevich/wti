@@ -69,6 +69,10 @@ REGIME_K_STATES = 3
 # back state-count complexity.
 VOL_REGIME_K_STATES = 2
 
+# Default driver for the TVTP volatility-regime model. GRI remains available
+# for comparison, but the current research path uses the oil-specific index.
+VOL_REGIME_DRIVER = "log_gpr_oil"
+
 # Regime-based POSITION SIZING rather than a binary entry block. A binary
 # block turned out to suppress ~93.6% of the entire out-of-sample window,
 # because GRI has been structurally elevated across nearly all of it, not
