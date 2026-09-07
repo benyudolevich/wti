@@ -15,3 +15,8 @@ report/*.aux
 report/*.log
 report/*.out
 report/*.toc
+
+# Generated validation and test artifacts
+vol_regime_validation.csv
+.pytest_cache/
+*.egg-info/
