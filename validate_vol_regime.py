@@ -23,7 +23,7 @@ from load_data import load_daily_dataset
 from vol_regime import attach_vol_regime, FORECAST_HORIZONS
 import config
 
-DRIVER_COL = sys.argv[1] if len(sys.argv) > 1 else "log_gri"
+DRIVER_COL = sys.argv[1] if len(sys.argv) > 1 else config.VOL_REGIME_DRIVER
 
 df = load_daily_dataset()
 df["log_ovx"] = np.log(df["ovx"])
