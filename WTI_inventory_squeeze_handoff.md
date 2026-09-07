@@ -1,3 +1,5 @@
+> **Historical handoff:** this document records the original inventory-squeeze build plan. The current implementation has since expanded to include the spline fair-value model, GRI/GPR_OIL volatility-regime research, and a separate timing path. Start with README.md, run_backtest.py, and run_vol_backtest.py for the current pipeline.
+>
 # WTI Inventory-Squeeze Model — Claude Code Handoff
 
 ## Project goal
