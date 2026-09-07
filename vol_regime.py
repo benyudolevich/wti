@@ -4,8 +4,8 @@ Forward-looking volatility regime model.
 Unlike regime.py (which classifies the CURRENT state from GRI alone with a
 fixed transition matrix), this fits a Markov-switching model on log(OVX) --
 the actual volatility series we care about -- where the TRANSITION
-PROBABILITIES themselves are a function of the configured geopolitical-risk driver (time-varying transition
-probabilities, TVTP). That means when GRI rises, the model's own estimated
+PROBABILITIES themselves are a function of the configured geopolitical-risk driver
+(time-varying transition probabilities, TVTP). That means when the driver rises, the model's own estimated
 probability of transitioning into the high-vol state rises too, *before*
 OVX has necessarily moved -- which is what lets this produce a genuine
 h-day-ahead forecast rather than just a same-day classification.
@@ -16,9 +16,9 @@ window only, then frozen and applied via the causal Hamilton filter (not
 the Kim smoother) across the full sample.
 
 Forecasting mechanism: given the filtered state distribution at time t and
-the transition matrix implied by GRI_t (frozen-covariate assumption -- we
-don't know future GRI, so we project forward assuming today's GRI level
-persists), the h-day-ahead state distribution is TM^h @ state_t (Chapman-
+the transition matrix implied by today's driver level (frozen-covariate
+assumption -- we do not know the future driver, so we project forward
+assuming today's level persists), the h-day-ahead state distribution is TM^h @ state_t (Chapman-
 Kolmogorov). This is what "5 days before a regime shift" cashes out to
 mechanically.
 """
